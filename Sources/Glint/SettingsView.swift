@@ -48,22 +48,14 @@ struct SettingsView: View {
             if let error = model.preferences.loginError { Text(error).foregroundStyle(.red).font(.caption) }
             LabeledContent("Open launcher", value: "⌥ Space")
             Divider()
-            Text("Google Calendar").font(.headline)
-            Text("Connect directly to Google Calendar. Glint shows a join link from two minutes before a meeting starts until it ends.")
+            Text("Calendar").font(.headline)
+            Text("Use your macOS calendars, including synced Google accounts. Glint shows a join link from two minutes before a meeting starts until it ends.")
                 .font(.caption).foregroundStyle(.secondary)
-            if calendar.connected {
-                Label("Google Calendar connected", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
-                Button("Disconnect") { calendar.disconnect() }
+            if calendar.authorized {
+                Label("Calendar access enabled", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
             } else {
-                TextField("Desktop OAuth client ID", text: $calendar.clientID)
-                    .textFieldStyle(.roundedBorder)
-                HStack {
-                    Link("Create a Google OAuth client", destination: URL(string: "https://console.cloud.google.com/auth/clients")!)
-                    Spacer()
-                    Button(calendar.connecting ? "Connecting…" : "Connect Google Calendar") {
-                        Task { await calendar.signIn() }
-                    }
-                    .disabled(calendar.connecting || calendar.clientID.trimmingCharacters(in: .whitespaces).isEmpty)
+                Button("Allow Calendar Access") {
+                    Task { await calendar.requestAccess() }
                 }
             }
             if let status = calendar.status { Text(status).font(.caption).foregroundStyle(.secondary) }

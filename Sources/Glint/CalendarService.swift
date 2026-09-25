@@ -1,85 +1,70 @@
+import EventKit
 import Foundation
+import Security
+
+struct CalendarMeeting: Equatable {
+    let title: String
+    let start: Date
+    let url: URL
+}
 
 @MainActor final class CalendarService: ObservableObject {
-    @Published private(set) var meeting: GoogleMeeting?
-    @Published private(set) var connected = false
-    @Published private(set) var connecting = false
+    @Published private(set) var meeting: CalendarMeeting?
+    @Published private(set) var authorized: Bool
     @Published private(set) var status: String?
-    @Published var clientID: String {
-        didSet {
-            UserDefaults.standard.set(clientID.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "googleClientID")
-            connected = credentials?.clientID == clientID.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-    }
 
-    private let oauth = GoogleOAuth()
-    private var credentials: GoogleCredentials?
-    private var calendarIDs: [String] = []
-    private var calendarsLoadedAt = Date.distantPast
+    private let store = EKEventStore()
     private var timer: Timer?
-    private var refreshing = false
 
     init() {
-        clientID = UserDefaults.standard.string(forKey: "googleClientID") ?? ""
-        credentials = GoogleKeychain.load()
-        connected = credentials != nil && credentials?.clientID == clientID
-        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            Task { @MainActor in await self?.refresh() }
+        Self.removeLegacyGoogleCredentials()
+        authorized = EKEventStore.authorizationStatus(for: .event) == .fullAccess
+        refresh()
+        timer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
         }
-        Task { await refresh() }
     }
 
-    func signIn() async {
-        guard !connecting else { return }
-        connecting = true
-        status = nil
+    func requestAccess() async {
         do {
-            let credential = try await oauth.signIn(clientID: clientID.trimmingCharacters(in: .whitespacesAndNewlines))
-            credentials = credential
-            connected = true
-            calendarIDs = []
-            await refresh()
-            if status == nil { status = "Connected to Google Calendar" }
+            authorized = try await store.requestFullAccessToEvents()
+            status = authorized ? nil : "Enable Glint in System Settings → Privacy & Security → Calendars."
         } catch { status = error.localizedDescription }
-        connecting = false
+        refresh()
     }
 
-    func disconnect() {
-        GoogleKeychain.delete()
-        credentials = nil
-        connected = false
-        calendarIDs = []
-        meeting = nil
-        status = "Google Calendar disconnected"
+    func refresh() {
+        authorized = EKEventStore.authorizationStatus(for: .event) == .fullAccess
+        guard authorized else { meeting = nil; return }
+        status = nil
+        let now = Date()
+        let events = store.events(matching: store.predicateForEvents(
+            withStart: now.addingTimeInterval(-24 * 60 * 60), end: now.addingTimeInterval(121),
+            calendars: nil
+        ))
+        let upcoming = events.filter {
+            !$0.isAllDay && $0.status != .canceled && $0.endDate > now &&
+                $0.startDate <= now.addingTimeInterval(120)
+        }.sorted { $0.startDate < $1.startDate }
+            .compactMap { event -> CalendarMeeting? in
+                guard let url = MeetingLinks.first(in: [event.url?.absoluteString, event.location, event.notes]) else {
+                    return nil
+                }
+                return CalendarMeeting(title: event.title ?? "Meeting", start: event.startDate, url: url)
+            }.first
+        if meeting != upcoming { meeting = upcoming }
     }
 
-    func refresh() async {
-        guard connected, !refreshing, var credential = credentials else { return }
-        refreshing = true
-        defer { refreshing = false }
-        do {
-            credential = try await oauth.accessToken(for: credential)
-            credentials = credential
-            let now = Date()
-            do {
-                meeting = try await fetchMeeting(token: credential.accessToken, now: now)
-            } catch GoogleCalendarError.unauthorized {
-                credential = try await oauth.accessToken(for: credential, forceRefresh: true)
-                credentials = credential
-                meeting = try await fetchMeeting(token: credential.accessToken, now: now)
-            }
-            status = nil
-        } catch {
-            status = error.localizedDescription
-            if case GoogleCalendarError.unauthorized = error { meeting = nil }
+    private static func removeLegacyGoogleCredentials() {
+        let defaults = UserDefaults.standard
+        guard !defaults.bool(forKey: "removedLegacyGoogleCalendar") else { return }
+        let query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                    kSecAttrService as String: "dev.haardik.glint.google-calendar",
+                                    kSecAttrAccount as String: "oauth"]
+        let result = SecItemDelete(query as CFDictionary)
+        if result == errSecSuccess || result == errSecItemNotFound {
+            defaults.removeObject(forKey: "googleClientID")
+            defaults.set(true, forKey: "removedLegacyGoogleCalendar")
         }
-    }
-
-    private func fetchMeeting(token: String, now: Date) async throws -> GoogleMeeting? {
-        if calendarIDs.isEmpty || now.timeIntervalSince(calendarsLoadedAt) > 600 {
-            calendarIDs = try await GoogleCalendarAPI.calendarIDs(token: token)
-            calendarsLoadedAt = now
-        }
-        return try await GoogleCalendarAPI.meetings(token: token, calendarIDs: calendarIDs, now: now).first
     }
 }

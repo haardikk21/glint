@@ -43,7 +43,7 @@ import Foundation
         refresh()
     }
 
-    func reset() { query = ""; presentationID = UUID(); Task { await calendar.refresh() } }
+    func reset() { query = ""; presentationID = UUID(); calendar.refresh() }
 
     private func updateSearch() {
         pendingSearch?.cancel()

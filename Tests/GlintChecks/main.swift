@@ -48,25 +48,10 @@ check(LauncherNavigation.nextID("file", in: ids, moving: .up) == "app", "Up retu
 check(LauncherNavigation.nextID("snippet", in: ids, moving: .down) == "snippet", "Down stops at end")
 check(LauncherNavigation.nextID("removed", in: ids, moving: .up) == "app", "stale selection resolves to first result")
 check(LauncherNavigation.nextID(nil, in: [], moving: .down) == nil, "empty results ignore navigation")
-let now = Date()
-let iso = ISO8601DateFormatter()
-let eventJSON = """
-{"summary":"Team sync","start":{"dateTime":"\(iso.string(from: now.addingTimeInterval(60)))"},
- "end":{"dateTime":"\(iso.string(from: now.addingTimeInterval(1860)))"},
- "description":"Join https://meet.google.com/abc-defg-hij"}
-"""
-let event = try! JSONDecoder().decode(GoogleCalendarModels.Event.self, from: Data(eventJSON.utf8))
-check(GoogleCalendarModels.meeting(from: event, now: now)?.url.host == "meet.google.com", "Google meeting link")
-let fakeLink = eventJSON.replacingOccurrences(of: "meet.google.com/", with: "meet.google.com.evil.example/")
-let fakeEvent = try! JSONDecoder().decode(GoogleCalendarModels.Event.self, from: Data(fakeLink.utf8))
-check(GoogleCalendarModels.meeting(from: fakeEvent, now: now) == nil, "reject lookalike meeting host")
-let declined = eventJSON.replacingOccurrences(of: "\"summary\"", with: "\"attendees\":[{\"self\":true,\"responseStatus\":\"declined\"}],\"summary\"")
-let declinedEvent = try! JSONDecoder().decode(GoogleCalendarModels.Event.self, from: Data(declined.utf8))
-check(GoogleCalendarModels.meeting(from: declinedEvent, now: now) == nil, "skip declined meeting")
-let (socket, port) = try! LoopbackReceiver.listen()
-DispatchQueue.global().async {
-    let url = URL(string: "http://127.0.0.1:\(port)/oauth2callback?state=nonce&code=sample")!
-    _ = try? Data(contentsOf: url)
-}
-check((try! LoopbackReceiver.receive(socket: socket, state: "nonce")) == "sample", "loopback OAuth callback")
-print("38 checks passed")
+let meet = MeetingLinks.first(in: [nil, "Join https://meet.google.com/abc-defg-hij."])
+check(meet?.absoluteString == "https://meet.google.com/abc-defg-hij", "meeting URL in notes")
+check(MeetingLinks.first(in: ["https://acme.zoom.us/j/123?pwd=abc"])?.host == "acme.zoom.us", "Zoom subdomain")
+check(MeetingLinks.first(in: ["https://meet.google.com.evil.example/abc"]) == nil, "reject lookalike host")
+check(MeetingLinks.first(in: ["http://meet.google.com/abc"]) == nil, "require HTTPS")
+check(MeetingLinks.first(in: ["https://meet.google.com/first", "https://zoom.us/second"])?.host == "meet.google.com", "prefer event URL")
+print("39 checks passed")

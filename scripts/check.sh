@@ -7,15 +7,13 @@ if [ -d "$sdk" ]; then
     swiftc -sdk "$sdk" Sources/Glint/Conversions.swift Sources/Glint/Fuzzy.swift \
         Sources/Glint/Models.swift Sources/Glint/Blockchain.swift Sources/Glint/ResultOrdering.swift \
         Sources/Glint/LauncherNavigation.swift \
-        Sources/Glint/GoogleCalendarModels.swift Sources/Glint/GoogleCalendarAPI.swift \
-        Sources/Glint/LoopbackReceiver.swift \
+        Sources/Glint/MeetingLinks.swift \
         Tests/GlintChecks/main.swift -o .build/glint-check
 else
     swiftc Sources/Glint/Conversions.swift Sources/Glint/Fuzzy.swift \
         Sources/Glint/Models.swift Sources/Glint/Blockchain.swift Sources/Glint/ResultOrdering.swift \
         Sources/Glint/LauncherNavigation.swift \
-        Sources/Glint/GoogleCalendarModels.swift Sources/Glint/GoogleCalendarAPI.swift \
-        Sources/Glint/LoopbackReceiver.swift \
+        Sources/Glint/MeetingLinks.swift \
         Tests/GlintChecks/main.swift -o .build/glint-check
 fi
 .build/glint-check
