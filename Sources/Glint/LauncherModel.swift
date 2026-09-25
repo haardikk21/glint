@@ -4,9 +4,12 @@ import Foundation
 
 @MainActor final class LauncherModel: ObservableObject {
     @Published var query = "" { didSet { updateSearch() } }
+    @Published var fileQuery = "" { didSet { if page == .files { searchFiles() } } }
     @Published var page: LauncherPage = .search
     @Published var settingsTab = 0
     @Published private(set) var results: [SearchResult] = []
+    @Published private(set) var fileResults: [URL] = []
+    @Published private(set) var searchingFiles = false
     @Published private(set) var presentationID = UUID()
     @Published var message: String?
 
@@ -19,10 +22,10 @@ import Foundation
     var pasteIntoPreviousApp: (() -> Void)?
 
     private var applications: [URL] = []
-    private var files: [URL] = []
     private var rateResult: String?
     private var rateFailed = false
     private var pendingSearch: Task<Void, Never>?
+    private var fileSearchTask: Task<Void, Never>?
     private var subscriptions = Set<AnyCancellable>()
 
     init() {
@@ -47,40 +50,66 @@ import Foundation
         refresh()
     }
 
-    func reset() { page = .search; query = ""; presentationID = UUID(); calendar.refresh() }
+    func reset() {
+        fileSearchTask?.cancel()
+        page = .search
+        fileQuery = ""
+        fileResults = []
+        searchingFiles = false
+        query = ""
+        presentationID = UUID()
+        calendar.refresh()
+    }
+
+    func openFileSearch() {
+        page = .files
+        fileQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    func goBack() {
+        if page == .files { fileSearchTask?.cancel(); searchingFiles = false }
+        page = .search
+    }
+
+    private func searchFiles() {
+        fileSearchTask?.cancel()
+        fileResults = []
+        let text = fileQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.count >= 2 else { searchingFiles = false; return }
+        searchingFiles = true
+        fileSearchTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 220_000_000)
+            guard !Task.isCancelled else { return }
+            let found = await Task.detached { FileIndex.search(text) }.value
+            guard !Task.isCancelled, self?.page == .files,
+                  self?.fileQuery.trimmingCharacters(in: .whitespacesAndNewlines) == text else { return }
+            self?.fileResults = found
+            self?.searchingFiles = false
+        }
+    }
 
     private func updateSearch() {
         pendingSearch?.cancel()
-        files = []
         rateResult = nil
         rateFailed = false
         refresh()
         let search = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !search.isEmpty else { return }
+        guard let request = Conversion.parse(search), Conversion.needsRate(request) else { return }
         pendingSearch = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 220_000_000)
             guard !Task.isCancelled else { return }
-            if search.count >= 2 && Conversion.immediate(search) == nil &&
-                !(Conversion.parse(search).map(Conversion.needsRate) ?? false) &&
-                Blockchain.destinations(for: search).isEmpty {
-                let found = await Task.detached { FileIndex.search(search) }.value
+            do {
+                let value = try await Conversion.rate(request)
                 guard !Task.isCancelled, self?.query == search else { return }
-                self?.files = found
-                self?.refresh()
+                self?.rateResult = value
+                self?.rateFailed = false
+            } catch {
+                guard !Task.isCancelled, self?.query == search else { return }
+                self?.rateResult = "Rate unavailable — check connection"
+                self?.rateFailed = true
             }
-            if let request = Conversion.parse(search), Conversion.needsRate(request) {
-                do {
-                    let value = try await Conversion.rate(request)
-                    guard !Task.isCancelled, self?.query == search else { return }
-                    self?.rateResult = value
-                    self?.rateFailed = false
-                } catch {
-                    guard !Task.isCancelled, self?.query == search else { return }
-                    self?.rateResult = "Rate unavailable — check connection"
-                    self?.rateFailed = true
-                }
-                self?.refresh()
-            }
+            self?.refresh()
         }
     }
 
@@ -112,10 +141,36 @@ import Foundation
                                           symbol: "video", kind: .meeting(meeting.url), section: "Up next"))
             }
         }
-        if lower.isEmpty || Fuzzy.score("Snippets", for: lower) != nil {
+        if ToolSearch.matches(lower, name: "Snippets") {
             items.append(SearchResult(id: "snippetsApplet", title: "Snippets",
                                       subtitle: "Browse and paste saved snippets", symbol: "text.quote",
                                       kind: .snippetsApplet, section: "Tools"))
+        }
+        if ToolSearch.matches(lower, name: "Emoji Picker", aliases: ["picker", "emojis", "symbols", "reactions"]) {
+            items.append(SearchResult(id: "emojiApplet", title: "Emoji Picker",
+                                      subtitle: "Search and copy emoji", symbol: "face.smiling",
+                                      kind: .emojiApplet, section: "Tools"))
+        }
+        if ToolSearch.matches(lower, name: "Toggle Appearance",
+                              aliases: ["appearance", "light", "dark", "theme"]) {
+            items.append(SearchResult(id: "toggleAppearance", title: "Toggle Appearance",
+                                      subtitle: "Switch macOS between light and dark mode",
+                                      symbol: "circle.lefthalf.filled", kind: .action { [weak self] in
+                                          if let error = SystemActions.toggleAppearance() {
+                                              self?.message = "Couldn't change appearance: \(error)"
+                                          } else {
+                                              self?.message = "Appearance changed"
+                                          }
+                                      }, section: "Tools"))
+        }
+        if !lower.isEmpty {
+            for command in TerminalCommand.allCases where
+                Fuzzy.score(command.title + " Ghostty", for: lower) != nil {
+                items.append(SearchResult(id: "terminal-\(command.command)", title: command.title,
+                                          subtitle: "Run \(command.command) in a new Ghostty tab or window",
+                                          symbol: "terminal", kind: .terminalCommand(command),
+                                          section: "Applications"))
+            }
         }
         var appCount = 0
         for app in applications {
@@ -141,13 +196,6 @@ import Foundation
                                           kind: .snippet(snippet.content), section: "Snippets"))
             }
         }
-        if !lower.isEmpty {
-            for file in files where Fuzzy.score(file.lastPathComponent, for: lower) != nil {
-                items.append(SearchResult(id: file.path, title: file.lastPathComponent,
-                                          subtitle: file.deletingLastPathComponent().path,
-                                          symbol: "doc", kind: .file(file), section: "Files"))
-            }
-        }
         let clipboardMatches = clipboard.entries.filter {
             lower.isEmpty || lower.contains("clip") || Fuzzy.score(String($0.text.prefix(500)), for: lower) != nil
         }
@@ -165,6 +213,9 @@ import Foundation
             items.append(SearchResult(id: "clearClipboard", title: "Clear clipboard history", subtitle: "Remove in-memory entries",
                                       symbol: "trash", kind: .action { [weak self] in self?.clipboard.clear() }, section: "Actions"))
         }
+        items.append(SearchResult(id: "fileSearchApplet", title: "Search Files",
+                                  subtitle: text.isEmpty ? "Search indexed files" : "Search Spotlight for “\(text)”",
+                                  symbol: "doc.text.magnifyingglass", kind: .fileSearchApplet, section: "Actions"))
         results = Array(ResultOrdering.order(items, query: lower).prefix(60))
     }
 
@@ -176,8 +227,15 @@ import Foundation
         case .conversion(let value), .clipboard(let value):
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(value, forType: .string)
-        case .snippet(let value): copySnippet(value, paste: false); return
+        case .snippet(let value): copyText(value, paste: false); return
         case .snippetsApplet: page = .snippets; return
+        case .emojiApplet: page = .emoji; return
+        case .fileSearchApplet: openFileSearch(); return
+        case .terminalCommand(let command):
+            if let error = GhosttyLauncher.launch(command) {
+                message = "Couldn't open \(command.title): \(error)"
+                return
+            }
         case .script(let script): run(script)
         case .info: return
         case .action(let action): action()
@@ -185,12 +243,17 @@ import Foundation
         hide?()
     }
 
-    func copySnippet(_ content: String, paste: Bool) {
+    func copyText(_ content: String, paste: Bool) {
         message = nil
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(content, forType: .string)
         hide?()
         if paste { pasteIntoPreviousApp?() }
+    }
+
+    func openFile(_ url: URL) {
+        NSWorkspace.shared.open(url)
+        hide?()
     }
 
     func run(_ script: ScriptCommand) {

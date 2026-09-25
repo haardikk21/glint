@@ -111,7 +111,13 @@ struct SnippetsView: View {
             .font(.system(size: 11)).foregroundStyle(.secondary)
             .padding(.horizontal, 20).padding(.vertical, 12)
         }
-        .onAppear { selectedID = matches.first?.id; searchFocused = true }
+        .onAppear {
+            selectedID = matches.first?.id
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 80_000_000)
+                if model.page == .snippets { searchFocused = true }
+            }
+        }
         .onChange(of: query) { _, _ in selectedID = matches.first?.id }
         .onChange(of: preferences.snippets.map(\.id)) { _, ids in
             if selectedID.map({ !ids.contains($0) }) ?? true { selectedID = matches.first?.id }
@@ -130,6 +136,6 @@ struct SnippetsView: View {
 
     private func activate(paste: Bool) {
         guard let selected else { return }
-        model.copySnippet(selected.content, paste: paste)
+        model.copyText(selected.content, paste: paste)
     }
 }

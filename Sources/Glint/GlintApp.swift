@@ -60,15 +60,22 @@ import SwiftUI
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, let panel = self.panel, panel.isKeyWindow,
                   event.window == nil || event.window === panel else { return event }
-            if self.model.page == .snippets {
+            if self.model.page != .search {
                 if let paste = LauncherNavigation.snippetPaste(for: event.keyCode, modifiers: event.modifierFlags) {
-                    NotificationCenter.default.post(name: .glintSnippetAction, object: paste)
+                    let action: Notification.Name = self.model.page == .emoji ? .glintEmojiAction :
+                        self.model.page == .files ? .glintFileAction : .glintSnippetAction
+                    NotificationCenter.default.post(name: action, object: paste)
                     return nil
                 }
                 if event.keyCode == 53 {
                     NotificationCenter.default.post(name: .glintBack, object: nil)
                     return nil
                 }
+            }
+            if self.model.page == .emoji,
+               let direction = LauncherNavigation.gridDirection(for: event.keyCode, modifiers: event.modifierFlags) {
+                NotificationCenter.default.post(name: .glintEmojiNavigate, object: direction)
+                return nil
             }
             if let direction = LauncherNavigation.direction(for: event.keyCode, modifiers: event.modifierFlags) {
                 NotificationCenter.default.post(name: .glintNavigate, object: direction)

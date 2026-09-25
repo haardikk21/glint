@@ -13,12 +13,14 @@ struct LauncherView: View {
     var body: some View {
         Group {
             if model.page == .snippets { SnippetsView(model: model) }
+            else if model.page == .emoji { EmojiPickerView(model: model) }
+            else if model.page == .files { FilesView(model: model) }
             else { searchPage }
         }
         .frame(width: 660, height: 490)
         .background(.regularMaterial)
         .onExitCommand {
-            if model.page == .snippets { model.page = .search }
+            if model.page != .search { model.goBack() }
             else { model.hide?() }
         }
         .background(KeyboardCommandView(onSettings: { model.openSettings?(); model.hide?() }))
@@ -120,7 +122,11 @@ struct LauncherView: View {
         }
         .onAppear {
             if model.query.isEmpty { selectedID = nil }
-            searchFocused = true
+            searchFocused = false
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 80_000_000)
+                if model.page == .search { searchFocused = true }
+            }
         }
         .onChange(of: model.query) { _, value in selectedID = value.isEmpty ? nil : model.results.first?.id }
         .onChange(of: model.results.map(\.id)) { _, ids in

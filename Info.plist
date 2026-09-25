@@ -11,4 +11,5 @@
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>LSUIElement</key><true/>
     <key>NSCalendarsFullAccessUsageDescription</key><string>Glint reads upcoming meetings from macOS Calendar to show a join button.</string>
+    <key>NSAppleEventsUsageDescription</key><string>Glint uses macOS automation to toggle appearance and launch commands in Ghostty.</string>
 </dict></plist>

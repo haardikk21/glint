@@ -15,6 +15,9 @@ enum ApplicationIndex {
                 walker.skipDescendants()
             }
         }
+        if let finder = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.finder") {
+            found[finder.path] = finder
+        }
         return found.values.sorted { $0.deletingPathExtension().lastPathComponent.localizedStandardCompare(
             $1.deletingPathExtension().lastPathComponent) == .orderedAscending }
     }
