@@ -22,9 +22,20 @@ enum Conversion {
 
     static func parse(_ input: String) -> Request? {
         let parts = input.trimmingCharacters(in: .whitespacesAndNewlines).split(whereSeparator: \.isWhitespace)
+        if parts.count == 3, parts[1].lowercased() == "to" {
+            let source = String(parts[0]).uppercased()
+            let destination = String(parts[2]).uppercased()
+            guard isKnown(source), isKnown(destination) else { return nil }
+            return Request(amount: 1, source: source, destination: destination)
+        }
         guard parts.count == 4, parts[2].lowercased() == "to",
               let amount = Double(parts[0].replacingOccurrences(of: ",", with: "")), amount.isFinite else { return nil }
         return Request(amount: amount, source: String(parts[1]).uppercased(), destination: String(parts[3]).uppercased())
+    }
+
+    private static func isKnown(_ symbol: String) -> Bool {
+        units[symbol] != nil || fiat.contains(symbol) || cryptoIDs[symbol] != nil ||
+            ["C", "F", "K"].contains(symbol)
     }
 
     static func immediate(_ input: String) -> String? {
