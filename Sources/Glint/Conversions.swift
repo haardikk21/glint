@@ -15,18 +15,42 @@ enum Conversion {
         "M": ("length", 1), "KM": ("length", 1_000), "CM": ("length", 0.01),
         "MM": ("length", 0.001), "MI": ("length", 1609.344), "FT": ("length", 0.3048),
         "IN": ("length", 0.0254), "KG": ("mass", 1), "G": ("mass", 0.001),
-        "LB": ("mass", 0.45359237), "OZ": ("mass", 0.028349523125)
+        "LB": ("mass", 0.45359237), "OZ": ("mass", 0.028349523125),
+        "MS": ("time", 0.001), "MSEC": ("time", 0.001), "MILLISECOND": ("time", 0.001),
+        "MILLISECONDS": ("time", 0.001), "S": ("time", 1), "SEC": ("time", 1),
+        "SECS": ("time", 1), "SECOND": ("time", 1), "SECONDS": ("time", 1),
+        "MIN": ("time", 60), "MINS": ("time", 60), "MINUTE": ("time", 60),
+        "MINUTES": ("time", 60), "H": ("time", 3600), "HR": ("time", 3600),
+        "HRS": ("time", 3600), "HOUR": ("time", 3600), "HOURS": ("time", 3600),
+        "D": ("time", 86400), "DAY": ("time", 86400), "DAYS": ("time", 86400),
+        "WK": ("time", 604800), "WEEK": ("time", 604800), "WEEKS": ("time", 604800)
     ]
+    private static let attachedAmount = try! NSRegularExpression(
+        pattern: #"^([+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?)([A-Za-z]+)$"#
+    )
     static let cryptoIDs = ["BTC": "bitcoin", "ETH": "ethereum", "SOL": "solana"]
     static let fiat = Set(["USD", "CAD", "EUR", "GBP", "JPY", "AUD", "CHF", "CNY", "INR", "NZD", "SEK", "NOK", "DKK", "SGD", "HKD"])
 
     static func parse(_ input: String) -> Request? {
         let parts = input.trimmingCharacters(in: .whitespacesAndNewlines).split(whereSeparator: \.isWhitespace)
         if parts.count == 3, parts[1].lowercased() == "to" {
-            let source = String(parts[0]).uppercased()
+            let first = String(parts[0])
             let destination = String(parts[2]).uppercased()
+            let source: String
+            let amount: Double
+            let range = NSRange(first.startIndex..<first.endIndex, in: first)
+            if let match = attachedAmount.firstMatch(in: first, range: range),
+               let amountRange = Range(match.range(at: 1), in: first),
+               let unitRange = Range(match.range(at: 2), in: first),
+               let value = Double(first[amountRange]), value.isFinite {
+                amount = value
+                source = String(first[unitRange]).uppercased()
+            } else {
+                amount = 1
+                source = first.uppercased()
+            }
             guard isKnown(source), isKnown(destination) else { return nil }
-            return Request(amount: 1, source: source, destination: destination)
+            return Request(amount: amount, source: source, destination: destination)
         }
         guard parts.count == 4, parts[2].lowercased() == "to",
               let amount = Double(parts[0].replacingOccurrences(of: ",", with: "")), amount.isFinite else { return nil }
@@ -43,11 +67,14 @@ enum Conversion {
         if let request = parse(text) {
             if request.source == request.destination,
                (units[request.source] != nil || fiat.contains(request.source) || cryptoIDs[request.source] != nil) {
-                return "\(format(request.amount)) \(request.destination)"
+                let dimension = units[request.source]?.dimension ?? ""
+                return "\(format(request.amount)) \(unitLabel(request.destination, value: request.amount, dimension: dimension))"
             }
             if let source = units[request.source], let destination = units[request.destination],
                source.dimension == destination.dimension {
-                return "\(format(request.amount * source.factor / destination.factor)) \(request.destination)"
+                let value = request.amount * source.factor / destination.factor
+                guard value.isFinite else { return nil }
+                return "\(format(value)) \(unitLabel(request.destination, value: value, dimension: source.dimension))"
             }
             if let result = temperature(request) { return result }
         }
@@ -108,6 +135,21 @@ enum Conversion {
         let result = destination == "F" ? celsius * 9 / 5 + 32 :
             destination == "K" ? celsius + 273.15 : celsius
         return "\(format(result)) \(destination == "K" ? "K" : "°" + destination)"
+    }
+
+    private static func unitLabel(_ symbol: String, value: Double, dimension: String) -> String {
+        guard dimension == "time" else { return symbol }
+        let singular: String
+        switch symbol {
+        case "MS", "MSEC", "MILLISECOND", "MILLISECONDS": singular = "millisecond"
+        case "S", "SEC", "SECS", "SECOND", "SECONDS": singular = "second"
+        case "MIN", "MINS", "MINUTE", "MINUTES": singular = "minute"
+        case "H", "HR", "HRS", "HOUR", "HOURS": singular = "hour"
+        case "D", "DAY", "DAYS": singular = "day"
+        case "WK", "WEEK", "WEEKS": singular = "week"
+        default: return symbol
+        }
+        return value.magnitude == 1 ? singular : singular + "s"
     }
 
     private static func format(_ value: Double) -> String {

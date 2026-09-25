@@ -117,7 +117,7 @@ import Foundation
         let text = query.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = text.lowercased()
         var items: [SearchResult] = []
-        if let value = Conversion.immediate(text) ?? rateResult {
+        if let value = Conversion.immediate(text) ?? MathExpression.result(for: text) ?? rateResult {
             items.append(SearchResult(id: "conversion", title: value,
                                       subtitle: rateFailed ? text : "Copy result · \(text)",
                                       symbol: "equal.circle", kind: rateFailed ? .info : .conversion(value),
