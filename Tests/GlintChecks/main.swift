@@ -31,6 +31,16 @@ check(Blockchain.destinations(for: "0x1234").isEmpty, "invalid hash")
 let calculation = SearchResult(id: "calc", title: "5,000 MB", subtitle: "", symbol: "", kind: .conversion("5,000 MB"), section: "Calculator")
 let app = SearchResult(id: "app", title: "1Password", subtitle: "", symbol: "", kind: .application(URL(fileURLWithPath: "/Applications/1Password.app")), section: "Applications")
 check(ResultOrdering.order([app, calculation], query: "5 GB to MB").first?.id == "calc", "conversion outranks apps")
+let ids = ["app", "file", "snippet"]
+check(LauncherNavigation.direction(for: 125, modifiers: []) == .down, "unmodified Down is navigation")
+check(LauncherNavigation.direction(for: 126, modifiers: []) == .up, "unmodified Up is navigation")
+check(LauncherNavigation.direction(for: 125, modifiers: [.option]) == nil, "modified arrows remain text editing")
+check(LauncherNavigation.nextID(nil, in: ids, moving: .down) == "app", "Down selects first result")
+check(LauncherNavigation.nextID("app", in: ids, moving: .down) == "file", "Down advances one result")
+check(LauncherNavigation.nextID("file", in: ids, moving: .up) == "app", "Up returns one result")
+check(LauncherNavigation.nextID("snippet", in: ids, moving: .down) == "snippet", "Down stops at end")
+check(LauncherNavigation.nextID("removed", in: ids, moving: .up) == "app", "stale selection resolves to first result")
+check(LauncherNavigation.nextID(nil, in: [], moving: .down) == nil, "empty results ignore navigation")
 let now = Date()
 let iso = ISO8601DateFormatter()
 let eventJSON = """
@@ -52,4 +62,4 @@ DispatchQueue.global().async {
     _ = try? Data(contentsOf: url)
 }
 check((try! LoopbackReceiver.receive(socket: socket, state: "nonce")) == "sample", "loopback OAuth callback")
-print("24 checks passed")
+print("33 checks passed")

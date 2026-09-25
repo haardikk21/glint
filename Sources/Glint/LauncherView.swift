@@ -21,10 +21,8 @@ struct LauncherView: View {
                     .focused($searchFocused)
                     .onSubmit { activate() }
                     .onMoveCommand { direction in
-                        guard !model.results.isEmpty else { return }
-                        let current = model.results.firstIndex { $0.id == selectedID } ?? -1
-                        if direction == .down { selectedID = model.results[min(current + 1, model.results.count - 1)].id }
-                        if direction == .up { selectedID = model.results[max(current - 1, 0)].id }
+                        if direction == .down { navigate(.down) }
+                        if direction == .up { navigate(.up) }
                     }
                 if !model.query.isEmpty {
                     Button { model.query = "" } label: { Image(systemName: "xmark.circle.fill") }
@@ -68,6 +66,8 @@ struct LauncherView: View {
                                 .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityAddTraits(result.id == selectedID ? .isSelected : [])
+                            .accessibilityValue(result.id == selectedID ? "Selected" : "")
                             .id(result.id)
                             .padding(.horizontal, 9)
                         }
@@ -113,6 +113,9 @@ struct LauncherView: View {
                 selectedID = ids.first
             }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .glintNavigate)) { notification in
+            if let direction = notification.object as? LauncherNavigation.Direction { navigate(direction) }
+        }
         .onExitCommand { model.hide?() }
         .background(KeyboardCommandView(onSettings: { model.openSettings?(); model.hide?() }))
     }
@@ -120,6 +123,10 @@ struct LauncherView: View {
     private func activate() {
         guard let selectedID, let result = model.results.first(where: { $0.id == selectedID }) else { return }
         model.execute(result)
+    }
+
+    private func navigate(_ direction: LauncherNavigation.Direction) {
+        selectedID = LauncherNavigation.nextID(selectedID, in: model.results.map(\.id), moving: direction)
     }
 
     @ViewBuilder private func resultIcon(_ result: SearchResult) -> some View {

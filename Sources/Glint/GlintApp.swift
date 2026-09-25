@@ -17,6 +17,7 @@ import SwiftUI
     private var settingsWindow: NSWindow?
     private var statusItem: NSStatusItem?
     private var hotkeys: HotkeyManager?
+    private var localKeyMonitor: Any?
     private var subscriptions = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -34,6 +35,14 @@ import SwiftUI
         panel.contentView = NSHostingView(rootView: LauncherView(model: model))
         panel.delegate = self
         self.panel = panel
+        localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard let self, let panel = self.panel, panel.isKeyWindow,
+                  event.window == nil || event.window === panel,
+                  let direction = LauncherNavigation.direction(for: event.keyCode, modifiers: event.modifierFlags)
+            else { return event }
+            NotificationCenter.default.post(name: .glintNavigate, object: direction)
+            return nil
+        }
 
         model.hide = { [weak self] in self?.panel?.orderOut(nil) }
         model.openSettings = { [weak self] in self?.showSettings() }
@@ -89,6 +98,10 @@ import SwiftUI
     }
 
     @objc private func quit() { NSApp.terminate(nil) }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        if let localKeyMonitor { NSEvent.removeMonitor(localKeyMonitor) }
+    }
 
     func windowDidResignKey(_ notification: Notification) {
         if let window = notification.object as? NSWindow, window === panel { panel?.orderOut(nil) }
