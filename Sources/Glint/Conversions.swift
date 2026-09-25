@@ -42,7 +42,7 @@ enum Conversion {
         }
         let hex = text.lowercased().replacingOccurrences(of: "hex ", with: "")
         if hex.hasPrefix("0x"), hex.count > 2,
-           let value = UInt64(hex.dropFirst(2), radix: 16) { return "\(value) decimal" }
+           let value = UInt64(hex.dropFirst(2), radix: 16) { return "\(value)" }
         if text.lowercased().hasPrefix("base64 ") {
             let encoded = String(text.dropFirst(7)).trimmingCharacters(in: .whitespaces)
             if let data = Data(base64Encoded: encoded), let decoded = String(data: data, encoding: .utf8) {

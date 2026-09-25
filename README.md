@@ -21,8 +21,8 @@ The scripts prefer the installed macOS 26.5 SDK because this machine's default S
 - Search Spotlight-indexed files in your home directory (2+ characters), omitting `node_modules`, Rust `target`, build artifacts, and other generated folders. Spotlight indexing must be enabled.
 - Add bash commands in Settings; optionally record a modifier + key global shortcut. Commands execute from your home directory; script output is discarded.
 - Connect directly to Google Calendar in Settings (see below). An upcoming meeting with a Meet, Zoom, Teams, Webex, Whereby, or Chime URL appears from 2 minutes before its start until it ends. Press Return to join.
-- Type `5 GB to MB`, `32 F to C`, `0xFF`, `decimal 255`, or `base64 SGVsbG8=` for instant conversions. `5 USD to CAD` and `234 ETH to USD` use live Frankfurter / CoinGecko rates and require internet access.
-- Paste a 66-character transaction or block hash (`0x` plus 64 hex digits) to open it as a transaction or block on BaseScan or Base Sepolia. A copied hash also appears as an action when the palette opens.
+- Type `5 GB to MB`, `32 F to C`, `0xFF` (shows `255`), `decimal 255`, or `base64 SGVsbG8=` for instant conversions. `5 USD to CAD` and `234 ETH to USD` use live Frankfurter / CoinGecko rates and require internet access.
+- Paste a transaction/block hash (`0x` plus 64 hex digits) or EVM address (`0x` plus 40 hex digits) to open it on BaseScan mainnet or Base Sepolia. A copied hash or address also appears as an action when the palette opens.
 - Search clipboard history (last 50 text items, in memory only) or save snippets in Settings. Return copies the selected entry. Clear history from Settings or the palette.
 
 If Option–Space or a custom shortcut is already owned by another app, Glint shows a shortcut-unavailable message. Change the other app's shortcut to use it here.

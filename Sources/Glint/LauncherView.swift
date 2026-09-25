@@ -29,7 +29,7 @@ struct LauncherView: View {
                         .buttonStyle(.plain).foregroundStyle(.secondary)
                 }
             }
-            .padding(.horizontal, 22).padding(.vertical, 19)
+            .padding(.horizontal, 22).padding(.top, 2).padding(.bottom, 19)
             Divider()
             ScrollViewReader { proxy in
                 ScrollView {
