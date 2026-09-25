@@ -38,10 +38,24 @@ check(Blockchain.destinations(for: address + "a").isEmpty, "reject non-address l
 let calculation = SearchResult(id: "calc", title: "5,000 MB", subtitle: "", symbol: "", kind: .conversion("5,000 MB"), section: "Calculator")
 let app = SearchResult(id: "app", title: "1Password", subtitle: "", symbol: "", kind: .application(URL(fileURLWithPath: "/Applications/1Password.app")), section: "Applications")
 check(ResultOrdering.order([app, calculation], query: "5 GB to MB").first?.id == "calc", "conversion outranks apps")
+let applet = SearchResult(id: "snippetsApplet", title: "Snippets", subtitle: "", symbol: "",
+                          kind: .snippetsApplet, section: "Tools")
+check(ResultOrdering.order([app, applet], query: "snippets").first?.id == "snippetsApplet", "Snippets command outranks apps")
+let snippets = [Snippet(name: "Status", content: "deployment progress"),
+                Snippet(name: "Deploy checklist", content: "check the rollout dashboard")]
+check(SnippetSearch.matches(snippets, query: "deploy").map(\.name) == ["Deploy checklist", "Status"],
+      "snippet name matches outrank content matches")
+check(SnippetSearch.matches(snippets, query: "rollout").map(\.name) == ["Deploy checklist"],
+      "snippet content is searchable")
+check(SnippetSearch.matches(snippets, query: "missing").isEmpty, "unmatched snippets are excluded")
 let ids = ["app", "file", "snippet"]
 check(LauncherNavigation.direction(for: 125, modifiers: []) == .down, "unmodified Down is navigation")
 check(LauncherNavigation.direction(for: 126, modifiers: []) == .up, "unmodified Up is navigation")
 check(LauncherNavigation.direction(for: 125, modifiers: [.option]) == nil, "modified arrows remain text editing")
+check(LauncherNavigation.snippetPaste(for: 36, modifiers: []) == false, "Return copies snippet")
+check(LauncherNavigation.snippetPaste(for: 36, modifiers: [.shift]) == true, "Shift-Return pastes snippet")
+check(LauncherNavigation.snippetPaste(for: 76, modifiers: [.shift]) == true, "keypad Shift-Enter pastes snippet")
+check(LauncherNavigation.snippetPaste(for: 36, modifiers: [.command]) == nil, "Command-Return is not intercepted")
 check(LauncherNavigation.nextID(nil, in: ids, moving: .down) == "app", "Down selects first result")
 check(LauncherNavigation.nextID("app", in: ids, moving: .down) == "file", "Down advances one result")
 check(LauncherNavigation.nextID("file", in: ids, moving: .up) == "app", "Up returns one result")
@@ -54,4 +68,4 @@ check(MeetingLinks.first(in: ["https://acme.zoom.us/j/123?pwd=abc"])?.host == "a
 check(MeetingLinks.first(in: ["https://meet.google.com.evil.example/abc"]) == nil, "reject lookalike host")
 check(MeetingLinks.first(in: ["http://meet.google.com/abc"]) == nil, "require HTTPS")
 check(MeetingLinks.first(in: ["https://meet.google.com/first", "https://zoom.us/second"])?.host == "meet.google.com", "prefer event URL")
-print("39 checks passed")
+print("47 checks passed")

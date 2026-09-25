@@ -10,7 +10,6 @@ struct SettingsView: View {
     @State private var shortcutLabel: String
     @State private var snippetName: String
     @State private var snippetBody: String
-    @State private var tab: Int
 
     init(model: LauncherModel) {
         self.model = model
@@ -20,20 +19,19 @@ struct SettingsView: View {
         _shortcutLabel = State(initialValue: "")
         _snippetName = State(initialValue: "")
         _snippetBody = State(initialValue: "")
-        _tab = State(initialValue: 0)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Picker("", selection: $tab) {
+            Picker("", selection: $model.settingsTab) {
                 Text("General").tag(0)
                 Text("Scripts").tag(1)
                 Text("Snippets").tag(2)
             }
             .pickerStyle(.segmented)
-            if tab == 0 { general }
-            if tab == 1 { scripts }
-            if tab == 2 { snippets }
+            if model.settingsTab == 0 { general }
+            if model.settingsTab == 1 { scripts }
+            if model.settingsTab == 2 { snippets }
             Spacer(minLength: 0)
         }
         .padding(24).frame(width: 540, height: 520)

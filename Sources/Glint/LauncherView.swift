@@ -11,6 +11,20 @@ struct LauncherView: View {
     }
 
     var body: some View {
+        Group {
+            if model.page == .snippets { SnippetsView(model: model) }
+            else { searchPage }
+        }
+        .frame(width: 660, height: 490)
+        .background(.regularMaterial)
+        .onExitCommand {
+            if model.page == .snippets { model.page = .search }
+            else { model.hide?() }
+        }
+        .background(KeyboardCommandView(onSettings: { model.openSettings?(); model.hide?() }))
+    }
+
+    private var searchPage: some View {
         VStack(spacing: 0) {
             HStack(spacing: 14) {
                 Image(systemName: "sparkle.magnifyingglass")
@@ -104,9 +118,10 @@ struct LauncherView: View {
             .font(.system(size: 11)).foregroundStyle(.secondary)
             .padding(.horizontal, 20).padding(.vertical, 12)
         }
-        .frame(width: 660, height: 490)
-        .background(.regularMaterial)
-        .onAppear { searchFocused = true }
+        .onAppear {
+            if model.query.isEmpty { selectedID = nil }
+            searchFocused = true
+        }
         .onChange(of: model.query) { _, value in selectedID = value.isEmpty ? nil : model.results.first?.id }
         .onChange(of: model.results.map(\.id)) { _, ids in
             if !model.query.isEmpty && (selectedID.map { !ids.contains($0) } ?? true) {
@@ -116,8 +131,6 @@ struct LauncherView: View {
         .onReceive(NotificationCenter.default.publisher(for: .glintNavigate)) { notification in
             if let direction = notification.object as? LauncherNavigation.Direction { navigate(direction) }
         }
-        .onExitCommand { model.hide?() }
-        .background(KeyboardCommandView(onSettings: { model.openSettings?(); model.hide?() }))
     }
 
     private func activate() {

@@ -21,12 +21,15 @@ struct ClipboardEntry: Identifiable {
     let date = Date()
 }
 
+enum LauncherPage { case search, snippets }
+
 enum ResultKind {
     case application(URL)
     case file(URL)
     case conversion(String)
     case clipboard(String)
     case snippet(String)
+    case snippetsApplet
     case script(ScriptCommand)
     case meeting(URL)
     case explorer(URL)

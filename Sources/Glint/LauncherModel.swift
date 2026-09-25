@@ -4,6 +4,8 @@ import Foundation
 
 @MainActor final class LauncherModel: ObservableObject {
     @Published var query = "" { didSet { updateSearch() } }
+    @Published var page: LauncherPage = .search
+    @Published var settingsTab = 0
     @Published private(set) var results: [SearchResult] = []
     @Published private(set) var presentationID = UUID()
     @Published var message: String?
@@ -13,6 +15,8 @@ import Foundation
     let calendar = CalendarService()
     var hide: (() -> Void)?
     var openSettings: (() -> Void)?
+    var openSnippetSettings: (() -> Void)?
+    var pasteIntoPreviousApp: (() -> Void)?
 
     private var applications: [URL] = []
     private var files: [URL] = []
@@ -43,7 +47,7 @@ import Foundation
         refresh()
     }
 
-    func reset() { query = ""; presentationID = UUID(); calendar.refresh() }
+    func reset() { page = .search; query = ""; presentationID = UUID(); calendar.refresh() }
 
     private func updateSearch() {
         pendingSearch?.cancel()
@@ -108,6 +112,11 @@ import Foundation
                                           symbol: "video", kind: .meeting(meeting.url), section: "Up next"))
             }
         }
+        if lower.isEmpty || Fuzzy.score("Snippets", for: lower) != nil {
+            items.append(SearchResult(id: "snippetsApplet", title: "Snippets",
+                                      subtitle: "Browse and paste saved snippets", symbol: "text.quote",
+                                      kind: .snippetsApplet, section: "Tools"))
+        }
         var appCount = 0
         for app in applications {
             let name = app.deletingPathExtension().lastPathComponent
@@ -164,14 +173,24 @@ import Foundation
         switch result.kind {
         case .application(let url), .file(let url), .meeting(let url), .explorer(let url):
             NSWorkspace.shared.open(url)
-        case .conversion(let value), .clipboard(let value), .snippet(let value):
+        case .conversion(let value), .clipboard(let value):
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(value, forType: .string)
+        case .snippet(let value): copySnippet(value, paste: false); return
+        case .snippetsApplet: page = .snippets; return
         case .script(let script): run(script)
         case .info: return
         case .action(let action): action()
         }
         hide?()
+    }
+
+    func copySnippet(_ content: String, paste: Bool) {
+        message = nil
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(content, forType: .string)
+        hide?()
+        if paste { pasteIntoPreviousApp?() }
     }
 
     func run(_ script: ScriptCommand) {

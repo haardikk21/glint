@@ -23,7 +23,8 @@ The scripts prefer the installed macOS 26.5 SDK because this machine's default S
 - Allow macOS Calendar access in Settings (see below). An upcoming meeting with a Meet, Zoom, Teams, Webex, Whereby, or Chime URL appears from 2 minutes before its start until it ends. Press Return to join.
 - Type `5 GB to MB`, `32 F to C`, `0xFF` (shows `255`), `decimal 255`, or `base64 SGVsbG8=` for instant conversions. `5 USD to CAD` and `234 ETH to USD` use live Frankfurter / CoinGecko rates and require internet access.
 - Paste a transaction/block hash (`0x` plus 64 hex digits) or EVM address (`0x` plus 40 hex digits) to open it on BaseScan mainnet or Base Sepolia. A copied hash or address also appears as an action when the palette opens.
-- Search clipboard history (last 50 text items, in memory only) or save snippets in Settings. Return copies the selected entry. Clear history from Settings or the palette.
+- Search clipboard history (last 50 text items, in memory only) or save snippets in Settings. Clear history from Settings or the palette.
+- Search **Snippets** and press Return to open the two-column browser: names on the left, selected content on the right. Use ↑/↓ to navigate, Return to copy, Shift–Return to copy and paste into the app you were using before Glint, and Escape to go back. **Manage Snippets** opens the Snippets editor. The first copy-and-paste requires macOS **System Settings → Privacy & Security → Accessibility** permission for Glint; without it, the snippet is still copied.
 
 If Option–Space or a custom shortcut is already owned by another app, Glint shows a shortcut-unavailable message. Change the other app's shortcut to use it here.
 

@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import Combine
 import SwiftUI
 
@@ -18,6 +19,7 @@ import SwiftUI
     private var statusItem: NSStatusItem?
     private var hotkeys: HotkeyManager?
     private var localKeyMonitor: Any?
+    private var previousApplication: NSRunningApplication?
     private var subscriptions = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -57,15 +59,38 @@ import SwiftUI
         self.panel = panel
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, let panel = self.panel, panel.isKeyWindow,
-                  event.window == nil || event.window === panel,
-                  let direction = LauncherNavigation.direction(for: event.keyCode, modifiers: event.modifierFlags)
-            else { return event }
-            NotificationCenter.default.post(name: .glintNavigate, object: direction)
-            return nil
+                  event.window == nil || event.window === panel else { return event }
+            if self.model.page == .snippets {
+                if let paste = LauncherNavigation.snippetPaste(for: event.keyCode, modifiers: event.modifierFlags) {
+                    NotificationCenter.default.post(name: .glintSnippetAction, object: paste)
+                    return nil
+                }
+                if event.keyCode == 53 {
+                    NotificationCenter.default.post(name: .glintBack, object: nil)
+                    return nil
+                }
+            }
+            if let direction = LauncherNavigation.direction(for: event.keyCode, modifiers: event.modifierFlags) {
+                NotificationCenter.default.post(name: .glintNavigate, object: direction)
+                return nil
+            }
+            return event
         }
 
         model.hide = { [weak self] in self?.panel?.orderOut(nil) }
         model.openSettings = { [weak self] in self?.showSettings() }
+        model.openSnippetSettings = { [weak self] in self?.presentSettings(tab: 2) }
+        model.pasteIntoPreviousApp = { [weak self] in self?.pasteIntoPreviousApp() }
+        previousApplication = NSWorkspace.shared.frontmostApplication
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didActivateApplicationNotification)
+            .compactMap { $0.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication }
+            .sink { [weak self] application in
+                Task { @MainActor in
+                    if application.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+                        self?.previousApplication = application
+                    }
+                }
+            }.store(in: &subscriptions)
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         item.button?.image = NSImage(systemSymbolName: "sparkle.magnifyingglass", accessibilityDescription: "Glint")
@@ -94,6 +119,10 @@ import SwiftUI
         guard let panel else { return }
         if panel.isVisible { panel.orderOut(nil) }
         else {
+            if let front = NSWorkspace.shared.frontmostApplication,
+               front.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+                previousApplication = front
+            }
             model.reset()
             panel.center()
             NSApp.activate(ignoringOtherApps: true)
@@ -102,6 +131,11 @@ import SwiftUI
     }
 
     @objc private func showSettings() {
+        presentSettings(tab: 0)
+    }
+
+    private func presentSettings(tab: Int) {
+        model.settingsTab = tab
         if settingsWindow == nil {
             let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: 520),
                                   styleMask: [.titled, .closable, .miniaturizable],
@@ -118,6 +152,42 @@ import SwiftUI
     }
 
     @objc private func quit() { NSApp.terminate(nil) }
+
+    private func pasteIntoPreviousApp() {
+        guard let target = previousApplication, !target.isTerminated,
+              target.processIdentifier != ProcessInfo.processInfo.processIdentifier else {
+            model.message = "Copied. Open the target app and press ⌘V to paste."
+            return
+        }
+        guard AXIsProcessTrusted() else {
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            _ = AXIsProcessTrustedWithOptions(options)
+            model.message = "Copied. Allow Glint in Accessibility settings, then try ⇧↵ again."
+            return
+        }
+        guard target.activate() else {
+            model.message = "Copied. Could not activate the target app."
+            return
+        }
+        Task { @MainActor [weak self] in
+            for _ in 0..<10 {
+                if NSWorkspace.shared.frontmostApplication?.processIdentifier == target.processIdentifier {
+                    guard let down = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: true),
+                          let up = CGEvent(keyboardEventSource: nil, virtualKey: 9, keyDown: false) else {
+                        self?.model.message = "Copied. Could not send paste to the target app."
+                        return
+                    }
+                    down.flags = .maskCommand
+                    up.flags = .maskCommand
+                    down.post(tap: .cghidEventTap)
+                    up.post(tap: .cghidEventTap)
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 60_000_000)
+            }
+            self?.model.message = "Copied. Could not focus the target app to paste."
+        }
+    }
 
     func applicationWillTerminate(_ notification: Notification) {
         if let localKeyMonitor { NSEvent.removeMonitor(localKeyMonitor) }

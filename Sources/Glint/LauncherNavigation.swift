@@ -12,6 +12,12 @@ enum LauncherNavigation {
         }
     }
 
+    static func snippetPaste(for keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool? {
+        guard keyCode == 36 || keyCode == 76,
+              modifiers.intersection([.command, .option, .control]).isEmpty else { return nil }
+        return modifiers.contains(.shift)
+    }
+
     static func nextID(_ selectedID: String?, in ids: [String], moving direction: Direction) -> String? {
         guard !ids.isEmpty else { return nil }
         guard let selectedID, let current = ids.firstIndex(of: selectedID) else { return ids[0] }
@@ -24,4 +30,6 @@ enum LauncherNavigation {
 
 extension Notification.Name {
     static let glintNavigate = Notification.Name("dev.haardik.glint.navigate")
+    static let glintSnippetAction = Notification.Name("dev.haardik.glint.snippet-action")
+    static let glintBack = Notification.Name("dev.haardik.glint.back")
 }
