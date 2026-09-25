@@ -27,6 +27,9 @@ import SwiftUI
                             backing: .buffered, defer: false)
         panel.titleVisibility = .hidden
         panel.titlebarAppearsTransparent = true
+        for button in [NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton] {
+            panel.standardWindowButton(button)?.isHidden = true
+        }
         panel.isMovableByWindowBackground = true
         panel.isReleasedWhenClosed = false
         panel.isRestorable = false
