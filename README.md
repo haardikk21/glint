@@ -1,6 +1,6 @@
 # Glint
 
-A native macOS command palette built with SwiftUI, AppKit, Carbon hotkeys, EventKit, and Spotlight. It runs as a menu bar app; press **Option–Space** to open it.
+A native macOS command palette built with SwiftUI, AppKit, Carbon hotkeys, EventKit, and Spotlight. It runs as a menu bar app; press **Command–Space** to open it.
 
 ## Build and run
 
@@ -29,7 +29,7 @@ The scripts prefer the installed macOS 26.5 SDK because this machine's default S
 - Search **Snippets** and press Return to open the two-column browser: names on the left, selected content on the right. Use ↑/↓ to navigate, Return to copy, Shift–Return to copy and paste into the app you were using before Glint, and Escape to go back. **Manage Snippets** opens the Snippets editor. The first copy-and-paste requires macOS **System Settings → Privacy & Security → Accessibility** permission for Glint; without it, the snippet is still copied.
 - Search **Emoji Picker** to browse an offline emoji grid (including country flags), with fuzzy searches over Unicode names and common keywords such as `happy`, `poop`, or `US flag`. Use arrow keys to navigate, Return to copy, Shift–Return to copy and paste into the previous app, or click an emoji to copy it.
 
-If Option–Space or a custom shortcut is already owned by another app, Glint shows a shortcut-unavailable message. Change the other app's shortcut to use it here.
+If Command–Space is owned by Alfred or Spotlight, Glint shows a shortcut-unavailable message and automatically retries when it becomes free. Change the conflicting shortcut to use it here. Custom shortcuts report conflicts as well.
 
 ## Calendar access
 

@@ -44,7 +44,7 @@ struct SettingsView: View {
                 set: { model.preferences.setLaunchAtLogin($0) }
             ))
             if let error = model.preferences.loginError { Text(error).foregroundStyle(.red).font(.caption) }
-            LabeledContent("Open launcher", value: "⌥ Space")
+            LabeledContent("Open launcher", value: "⌘ Space")
             Divider()
             Text("Calendar").font(.headline)
             Text("Use your macOS calendars, including synced Google accounts. Glint shows a join link from two minutes before a meeting starts until it ends.")

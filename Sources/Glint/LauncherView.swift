@@ -112,7 +112,7 @@ struct LauncherView: View {
             }
             Divider()
             HStack {
-                Text(model.message ?? "⌥ Space to toggle · ↑↓ to navigate")
+                Text(model.message ?? "⌘ Space to toggle · ↑↓ to navigate")
                 Spacer()
                 Button("Settings  ⌘,") { model.openSettings?(); model.hide?() }
                     .buttonStyle(.plain)

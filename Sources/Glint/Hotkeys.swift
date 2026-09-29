@@ -7,6 +7,7 @@ import SwiftUI
     private var actions: [UInt32: () -> Void] = [:]
     private var handler: EventHandlerRef?
     private(set) var failures: [String] = []
+    var launcherAvailable: Bool { actions[1] != nil }
 
     init() {
         var type = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
@@ -29,13 +30,20 @@ import SwiftUI
         registrations.removeAll()
         actions.removeAll()
         failures.removeAll()
-        register(key: 49, modifiers: UInt32(optionKey), id: 1, label: "Launcher", action: toggle)
+        register(key: 49, modifiers: UInt32(cmdKey), id: 1, label: "Launcher", action: toggle)
         for (index, script) in scripts.enumerated() {
             guard let key = script.keyCode, let modifiers = script.modifiers else { continue }
             register(key: key, modifiers: modifiers, id: UInt32(index + 2), label: script.name) {
                 run(script)
             }
         }
+    }
+
+    func retryLauncher(toggle: @escaping () -> Void) -> Bool {
+        guard !launcherAvailable else { return true }
+        failures.removeAll { $0.hasPrefix("Launcher: ") }
+        register(key: 49, modifiers: UInt32(cmdKey), id: 1, label: "Launcher", action: toggle)
+        return launcherAvailable
     }
 
     private func register(key: UInt32, modifiers: UInt32, id: UInt32, label: String, action: @escaping () -> Void) {

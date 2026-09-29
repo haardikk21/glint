@@ -20,6 +20,7 @@ import SwiftUI
     private var hotkeys: HotkeyManager?
     private var localKeyMonitor: Any?
     private var previousApplication: NSRunningApplication?
+    private var shortcutRetryTimer: Timer?
     private var subscriptions = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -120,6 +121,15 @@ import SwiftUI
                 if !hotkeys.failures.isEmpty { self.model.message = hotkeys.failures.joined(separator: ", ") }
             }
         }.store(in: &subscriptions)
+        shortcutRetryTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let hotkeys = self.hotkeys, !hotkeys.launcherAvailable else { return }
+                if hotkeys.retryLauncher(toggle: { [weak self] in self?.toggle() }),
+                   self.model.message?.hasPrefix("Launcher: shortcut unavailable") == true {
+                    self.model.message = hotkeys.failures.isEmpty ? nil : hotkeys.failures.joined(separator: ", ")
+                }
+            }
+        }
     }
 
     @objc private func toggle() {
@@ -198,6 +208,7 @@ import SwiftUI
 
     func applicationWillTerminate(_ notification: Notification) {
         if let localKeyMonitor { NSEvent.removeMonitor(localKeyMonitor) }
+        shortcutRetryTimer?.invalidate()
     }
 
     func windowDidResignKey(_ notification: Notification) {
