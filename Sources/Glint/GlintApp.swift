@@ -64,7 +64,8 @@ import SwiftUI
             if self.model.page != .search {
                 if let paste = LauncherNavigation.snippetPaste(for: event.keyCode, modifiers: event.modifierFlags) {
                     let action: Notification.Name = self.model.page == .emoji ? .glintEmojiAction :
-                        self.model.page == .files ? .glintFileAction : .glintSnippetAction
+                        self.model.page == .files ? .glintFileAction :
+                        self.model.page == .clipboard ? .glintClipboardAction : .glintSnippetAction
                     NotificationCenter.default.post(name: action, object: paste)
                     return nil
                 }

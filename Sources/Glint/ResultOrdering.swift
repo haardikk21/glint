@@ -1,19 +1,33 @@
 import Foundation
 
 enum ResultOrdering {
-    static func order(_ results: [SearchResult], query: String) -> [SearchResult] {
+    static func order(_ results: [SearchResult], query: String, usage: SearchUsage = SearchUsage()) -> [SearchResult] {
         guard !query.isEmpty else { return results }
         let priority = ["Calculator": 0, "Explorer": 1, "Tools": 2, "Up next": 3]
+        let now = Date()
+        func group(_ result: SearchResult) -> Int {
+            switch result.kind {
+            case .webSearch, .fileSearchApplet: return 10
+            default: return priority[result.section] ?? 4
+            }
+        }
         func score(_ result: SearchResult) -> Int {
+            let familiarity = usage.boost(id: result.id, query: query, at: now)
             if case .terminalCommand(let command) = result.kind,
-               command.command.lowercased() == query { return 1_000 }
-            if result.title.lowercased() == query { return 900 }
+               command.command.lowercased() == query { return 1_000 + familiarity }
+            if case .settingsPane(let pane) = result.kind {
+                return (pane.relevance(for: query) ?? -100) + familiarity
+            }
+            if result.title.lowercased() == query { return 900 + familiarity }
             let match = Fuzzy.score(result.title, for: query) ?? -100
-            return result.title.lowercased().hasPrefix(query) ? match + 50 : match
+            if result.title.lowercased().hasPrefix(query) {
+                return match + 50 - max(0, result.title.count - query.count) + familiarity
+            }
+            return match + familiarity
         }
         return results.enumerated().sorted { a, b in
-            let left = priority[a.element.section] ?? 4
-            let right = priority[b.element.section] ?? 4
+            let left = group(a.element)
+            let right = group(b.element)
             if left != right { return left < right }
             let aScore = score(a.element)
             let bScore = score(b.element)

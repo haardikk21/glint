@@ -13,6 +13,7 @@ struct LauncherView: View {
     var body: some View {
         Group {
             if model.page == .snippets { SnippetsView(model: model) }
+            else if model.page == .clipboard { ClipboardHistoryView(model: model) }
             else if model.page == .emoji { EmojiPickerView(model: model) }
             else if model.page == .files { FilesView(model: model) }
             else { searchPage }

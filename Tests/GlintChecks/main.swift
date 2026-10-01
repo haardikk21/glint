@@ -76,10 +76,63 @@ check(Blockchain.destinations(for: address + "a").isEmpty, "reject non-address l
 let calculation = SearchResult(id: "calc", title: "5,000 MB", subtitle: "", symbol: "", kind: .conversion("5,000 MB"), section: "Calculator")
 let app = SearchResult(id: "app", title: "1Password", subtitle: "", symbol: "", kind: .application(URL(fileURLWithPath: "/Applications/1Password.app")), section: "Applications")
 check(ResultOrdering.order([app, calculation], query: "5 GB to MB").first?.id == "calc", "conversion outranks apps")
+let screenshot = SearchResult(id: "screenshot", title: "Screenshot", subtitle: "", symbol: "",
+                              kind: .application(URL(fileURLWithPath: "/System/Applications/Utilities/Screenshot.app")),
+                              section: "Applications")
+let sharing = SearchResult(id: "screenSharing", title: "Screen Sharing", subtitle: "", symbol: "",
+                           kind: .application(URL(fileURLWithPath: "/System/Applications/Utilities/Screen Sharing.app")),
+                           section: "Applications")
+check(ResultOrdering.order([sharing, screenshot], query: "screen").first?.id == screenshot.id,
+      "shorter Screenshot match beats alphabetical Screen Sharing")
+var usage = SearchUsage()
+let now = Date()
+usage.record(id: sharing.id, query: "screen", at: now)
+check(ResultOrdering.order([sharing, screenshot], query: "screen", usage: usage).first?.id == sharing.id,
+      "recent selection wins the next matching search")
+for _ in 0..<5 { usage.record(id: screenshot.id, query: "screen", at: now) }
+check(ResultOrdering.order([sharing, screenshot], query: "screen", usage: usage).first?.id == screenshot.id,
+      "frequently chosen Screenshot wins over occasional Screen Sharing")
+let restoredUsage = try! JSONDecoder().decode(SearchUsage.self, from: JSONEncoder().encode(usage))
+check(ResultOrdering.order([sharing, screenshot], query: "screen", usage: restoredUsage).first?.id == screenshot.id,
+      "search preference survives persistence")
 let fileSearch = SearchResult(id: "fileSearchApplet", title: "Search Files", subtitle: "", symbol: "",
                               kind: .fileSearchApplet, section: "Actions")
 check(ResultOrdering.order([fileSearch, app], query: "1Password").first?.id == "app",
       "application matches appear before the file-search action")
+let googleURL = SearchActions.googleURL(for: "  why is 1+1 & 2?  ")!
+check(googleURL.scheme == "https" && googleURL.host == "www.google.com" &&
+      URLComponents(url: googleURL, resolvingAgainstBaseURL: false)?.queryItems?.first?.value == "why is 1+1 & 2?",
+      "Google fallback preserves and encodes the search query")
+let googleSearch = SearchResult(id: "googleSearch", title: "Search Google for randomquery", subtitle: "", symbol: "",
+                                kind: .webSearch("randomquery"), section: "Actions")
+check(ResultOrdering.order([fileSearch, googleSearch], query: "randomquery").first?.id == "googleSearch",
+      "Google is the first fallback when nothing matches")
+check(ResultOrdering.order([googleSearch, app], query: "1Password").first?.id == "app",
+      "matching apps outrank Google fallback")
+check(ResultOrdering.order([googleSearch, fileSearch], query: "Search Files").first?.id == "fileSearchApplet",
+      "explicit Search Files query selects file mode")
+let panes = SystemSettingsCatalog.panes
+check(panes.count >= 20, "macOS exposes a broad set of directly addressable settings panes")
+for (title, identifier) in [
+    ("Accessibility", "com.apple.Accessibility-Settings.extension"),
+    ("Privacy & Security", "com.apple.settings.PrivacySecurity.extension"),
+    ("Storage", "com.apple.settings.Storage"),
+    ("Displays", "com.apple.Displays-Settings.extension"),
+    ("Mouse", "com.apple.Mouse-Settings.extension")
+] {
+    check(panes.first(where: { $0.title == title })?.url.absoluteString == "x-apple.systempreferences:\(identifier)",
+          "\(title) opens its installed settings extension")
+}
+check(panes.first(where: { $0.title == "Privacy & Security" })?.relevance(for: "privacy security") != nil,
+      "privacy and security can be found without an ampersand")
+check(panes.first(where: { $0.title == "Displays" })?.relevance(for: "display settings") != nil,
+      "display settings query finds Displays")
+if let screenTime = panes.first(where: { $0.title == "Screen Time" }) {
+    let pane = SearchResult(id: screenTime.id, title: screenTime.title, subtitle: "", symbol: "",
+                            kind: .settingsPane(screenTime), section: "System Settings")
+    check(ResultOrdering.order([pane, screenshot], query: "screen").first?.id == screenshot.id,
+          "Screenshot remains ahead of Screen Time settings")
+}
 let openCode = SearchResult(id: "oc", title: "OpenCode", subtitle: "", symbol: "",
                             kind: .terminalCommand(.openCode), section: "Applications")
 let docker = SearchResult(id: "docker", title: "Docker", subtitle: "", symbol: "",
@@ -94,8 +147,17 @@ check(ToolSearch.matches("dark", name: "Toggle Appearance", aliases: ["light", "
       "dark mode finds appearance toggle")
 check(ToolSearch.matches("emoji", name: "Emoji Picker", aliases: ["emojis"]),
       "emoji finds the picker")
-check(ApplicationIndex.load().contains(where: { $0.lastPathComponent == "Finder.app" }),
+let indexedApps = ApplicationIndex.load()
+check(indexedApps.contains(where: { $0.lastPathComponent == "Finder.app" }),
       "Finder is indexed alongside Applications")
+let screenApps = indexedApps.compactMap { url -> SearchResult? in
+    let name = url.deletingPathExtension().lastPathComponent
+    guard Fuzzy.score(name, for: "screen") != nil else { return nil }
+    return SearchResult(id: url.path, title: name, subtitle: "", symbol: "",
+                        kind: .application(url), section: "Applications")
+}
+check(ResultOrdering.order(screenApps, query: "screen").first?.title == "Screenshot",
+      "actual installed Screenshot app is the first screen search result")
 func compiles(_ source: String) -> Bool {
     guard let script = NSAppleScript(source: source) else { return false }
     var error: NSDictionary?
@@ -149,4 +211,4 @@ check(MeetingLinks.first(in: ["https://acme.zoom.us/j/123?pwd=abc"])?.host == "a
 check(MeetingLinks.first(in: ["https://meet.google.com.evil.example/abc"]) == nil, "reject lookalike host")
 check(MeetingLinks.first(in: ["http://meet.google.com/abc"]) == nil, "require HTTPS")
 check(MeetingLinks.first(in: ["https://meet.google.com/first", "https://zoom.us/second"])?.host == "meet.google.com", "prefer event URL")
-print("98 checks passed")
+print("116 checks passed")

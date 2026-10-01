@@ -24,11 +24,14 @@ import Foundation
     private var applications: [URL] = []
     private var rateResult: String?
     private var rateFailed = false
+    private var usage: SearchUsage
     private var pendingSearch: Task<Void, Never>?
     private var fileSearchTask: Task<Void, Never>?
     private var subscriptions = Set<AnyCancellable>()
 
     init() {
+        usage = UserDefaults.standard.data(forKey: "resultUsage.v1")
+            .flatMap { try? JSONDecoder().decode(SearchUsage.self, from: $0) } ?? SearchUsage()
         clipboard.start()
         preferences.$scripts.dropFirst().sink { [weak self] _ in
             Task { @MainActor in self?.refresh() }
@@ -146,6 +149,11 @@ import Foundation
                                       subtitle: "Browse and paste saved snippets", symbol: "text.quote",
                                       kind: .snippetsApplet, section: "Tools"))
         }
+        if ToolSearch.matches(lower, name: "Clipboard History", aliases: ["clipboard", "clips", "paste history"]) {
+            items.append(SearchResult(id: "clipboardApplet", title: "Clipboard History",
+                                      subtitle: "Browse and reuse recently copied text", symbol: "doc.on.clipboard",
+                                      kind: .clipboardApplet, section: "Tools"))
+        }
         if ToolSearch.matches(lower, name: "Emoji Picker", aliases: ["picker", "emojis", "symbols", "reactions"]) {
             items.append(SearchResult(id: "emojiApplet", title: "Emoji Picker",
                                       subtitle: "Search and copy emoji", symbol: "face.smiling",
@@ -189,21 +197,19 @@ import Foundation
                                           kind: .script(script), section: "Scripts"))
             }
         }
+        if !lower.isEmpty {
+            for pane in SystemSettingsCatalog.panes where pane.relevance(for: lower) != nil {
+                items.append(SearchResult(id: "settingsPane-\(pane.id)", title: pane.title,
+                                          subtitle: "Open System Settings", symbol: pane.symbol,
+                                          kind: .settingsPane(pane), section: "System Settings"))
+            }
+        }
         for snippet in preferences.snippets.prefix(lower.isEmpty ? 8 : preferences.snippets.count) {
             if lower.isEmpty || Fuzzy.score(snippet.name + " " + snippet.content, for: lower) != nil {
                 items.append(SearchResult(id: snippet.id.uuidString, title: snippet.name,
                                           subtitle: String(snippet.content.prefix(120)), symbol: "text.quote",
                                           kind: .snippet(snippet.content), section: "Snippets"))
             }
-        }
-        let clipboardMatches = clipboard.entries.filter {
-            lower.isEmpty || lower.contains("clip") || Fuzzy.score(String($0.text.prefix(500)), for: lower) != nil
-        }
-        for entry in clipboardMatches.prefix(lower.isEmpty ? 6 : 10) {
-            items.append(SearchResult(id: entry.id.uuidString,
-                                      title: String(entry.text.replacingOccurrences(of: "\n", with: " ").prefix(90)),
-                                      subtitle: "Clipboard · \(entry.date.formatted(date: .omitted, time: .shortened))",
-                                      symbol: "doc.on.clipboard", kind: .clipboard(entry.text), section: "Clipboard"))
         }
         if !lower.isEmpty && Fuzzy.score("settings preferences", for: lower) != nil {
             items.append(SearchResult(id: "settings", title: "Settings", subtitle: "Shortcuts, scripts, snippets & calendar",
@@ -213,34 +219,56 @@ import Foundation
             items.append(SearchResult(id: "clearClipboard", title: "Clear clipboard history", subtitle: "Remove in-memory entries",
                                       symbol: "trash", kind: .action { [weak self] in self?.clipboard.clear() }, section: "Actions"))
         }
+        if !text.isEmpty {
+            items.append(SearchResult(id: "googleSearch", title: "Search Google for “\(text)”",
+                                      subtitle: "Open in your browser", symbol: "globe",
+                                      kind: .webSearch(text), section: "Actions"))
+        }
         items.append(SearchResult(id: "fileSearchApplet", title: "Search Files",
                                   subtitle: text.isEmpty ? "Search indexed files" : "Search Spotlight for “\(text)”",
                                   symbol: "doc.text.magnifyingglass", kind: .fileSearchApplet, section: "Actions"))
-        results = Array(ResultOrdering.order(items, query: lower).prefix(60))
+        results = Array(ResultOrdering.order(items, query: lower, usage: usage).prefix(60))
     }
 
     func execute(_ result: SearchResult) {
         if case .info = result.kind { return }
         switch result.kind {
-        case .application(let url), .file(let url), .meeting(let url), .explorer(let url):
+        case .application(let url):
+            if NSWorkspace.shared.open(url) { remember(result) }
+        case .file(let url), .meeting(let url), .explorer(let url):
             NSWorkspace.shared.open(url)
-        case .conversion(let value), .clipboard(let value):
+        case .settingsPane(let pane):
+            if NSWorkspace.shared.open(pane.url) { remember(result) }
+        case .conversion(let value):
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(value, forType: .string)
-        case .snippet(let value): copyText(value, paste: false); return
-        case .snippetsApplet: page = .snippets; return
-        case .emojiApplet: page = .emoji; return
-        case .fileSearchApplet: openFileSearch(); return
+        case .snippet(let value): remember(result); copyText(value, paste: false); return
+        case .snippetsApplet: remember(result); page = .snippets; return
+        case .clipboardApplet: remember(result); page = .clipboard; return
+        case .emojiApplet: remember(result); page = .emoji; return
+        case .fileSearchApplet: remember(result); openFileSearch(); return
+        case .webSearch(let text):
+            guard let url = SearchActions.googleURL(for: text) else { return }
+            NSWorkspace.shared.open(url)
         case .terminalCommand(let command):
             if let error = GhosttyLauncher.launch(command) {
                 message = "Couldn't open \(command.title): \(error)"
                 return
             }
-        case .script(let script): run(script)
+            remember(result)
+        case .script(let script): remember(result); run(script)
         case .info: return
         case .action(let action): action()
         }
         hide?()
+    }
+
+    private func remember(_ result: SearchResult) {
+        usage.record(id: result.id, query: query)
+        if let data = try? JSONEncoder().encode(usage) {
+            UserDefaults.standard.set(data, forKey: "resultUsage.v1")
+        }
+        refresh()
     }
 
     func copyText(_ content: String, paste: Bool) {

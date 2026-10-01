@@ -57,6 +57,7 @@ enum LauncherNavigation {
 extension Notification.Name {
     static let glintNavigate = Notification.Name("dev.haardik.glint.navigate")
     static let glintSnippetAction = Notification.Name("dev.haardik.glint.snippet-action")
+    static let glintClipboardAction = Notification.Name("dev.haardik.glint.clipboard-action")
     static let glintEmojiAction = Notification.Name("dev.haardik.glint.emoji-action")
     static let glintEmojiNavigate = Notification.Name("dev.haardik.glint.emoji-navigate")
     static let glintFileAction = Notification.Name("dev.haardik.glint.file-action")
