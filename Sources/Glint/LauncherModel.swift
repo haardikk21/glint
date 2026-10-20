@@ -42,7 +42,10 @@ import Foundation
         clipboard.$entries.dropFirst().sink { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }.store(in: &subscriptions)
-        calendar.$meeting.dropFirst().sink { [weak self] _ in
+        calendar.$meetings.dropFirst().sink { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
+        }.store(in: &subscriptions)
+        calendar.$authorized.dropFirst().removeDuplicates().sink { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }.store(in: &subscriptions)
         Task { [weak self] in
@@ -61,7 +64,7 @@ import Foundation
         searchingFiles = false
         query = ""
         presentationID = UUID()
-        calendar.refresh()
+        calendar.refresh(syncSources: true)
     }
 
     func openFileSearch() {
@@ -136,13 +139,28 @@ import Foundation
                                       subtitle: destination.url.absoluteString, symbol: "link",
                                       kind: .explorer(destination.url), section: "Explorer"))
         }
-        if let meeting = calendar.meeting {
+        for meeting in calendar.meetings {
             let title = "Join \(meeting.title)"
-            if lower.isEmpty || Fuzzy.score(title, for: lower) != nil || lower.contains("meeting") {
-                items.append(SearchResult(id: "meeting", title: title,
-                                          subtitle: "\(meeting.start.formatted(date: .omitted, time: .shortened)) · \(meeting.url.host ?? "")",
+            if lower.isEmpty || Fuzzy.score(title, for: lower) != nil || lower.contains("meeting") || lower == "join" {
+                let started = meeting.start <= Date()
+                let time = meeting.start.formatted(date: .omitted, time: .shortened)
+                items.append(SearchResult(id: "meeting-\(meeting.id)", title: title,
+                                          subtitle: "\(started ? "Started" : "Starts") \(time) · \(meeting.url.host ?? "")",
                                           symbol: "video", kind: .meeting(meeting.url), section: "Up next"))
             }
+        }
+        if !calendar.authorized,
+           (lower.isEmpty && calendar.accessLost) || lower.contains("meeting") || lower.contains("calendar") {
+            let canRequest = calendar.canRequestAccess
+            items.append(SearchResult(id: "calendarAccess", title: "Allow Calendar Access for Meeting Joins",
+                                      subtitle: calendar.accessLost ?
+                                          "macOS dropped Glint's calendar permission — re-enable it to see meetings" :
+                                          "Glint needs Calendar access to show join links",
+                                      symbol: "calendar.badge.exclamationmark", kind: .action { [weak self] in
+                                          guard let self else { return }
+                                          if canRequest { Task { await self.calendar.requestAccess() } }
+                                          else { self.calendar.openPrivacySettings() }
+                                      }, section: "Up next"))
         }
         if ToolSearch.matches(lower, name: "Snippets") {
             items.append(SearchResult(id: "snippetsApplet", title: "Snippets",

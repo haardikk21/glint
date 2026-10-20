@@ -10,5 +10,8 @@ fi
 mkdir -p dist/Glint.app/Contents/MacOS
 cp .build/release/Glint dist/Glint.app/Contents/MacOS/Glint
 cp Info.plist dist/Glint.app/Contents/Info.plist
-codesign --force --sign - dist/Glint.app
+# Ad-hoc signatures change on every build. Pin the designated requirement to the bundle ID so
+# macOS keeps privacy grants (Calendar, Automation) across rebuilds instead of silently dropping them.
+codesign --force --sign - --identifier dev.haardik.glint \
+    --requirements '=designated => identifier "dev.haardik.glint"' dist/Glint.app
 open dist/Glint.app
